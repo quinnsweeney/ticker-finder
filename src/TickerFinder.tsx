@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useState, type FormEvent } from "react";
+import { Switch } from "./components/ui/switch";
 
 interface CompanyResult {
   symbol: string;
@@ -41,7 +42,7 @@ const mockData: Record<string, CompanyResult[]> = {
 
 async function fetchTickerData(
   query: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<CompanyResult[]> {
   const url = `https://financialmodelingprep.com/stable/search-name?query=${encodeURIComponent(query)}&apikey=${encodeURIComponent(apiKey)}`;
 
@@ -49,7 +50,7 @@ async function fetchTickerData(
     console.log(`[DEV] Mock API request: ${url}`);
     // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 100));
-    
+
     // Generate mock response based on query
     const mockResult: CompanyResult = {
       symbol: query.substring(0, 4).toUpperCase().replace(/\s/g, ""),
@@ -58,17 +59,25 @@ async function fetchTickerData(
       exchangeFullName: "NASDAQ Global Select",
       exchange: "NASDAQ",
     };
-    
+
     console.log(`[DEV] Mock response for "${query}":`, [mockResult]);
     return [mockResult];
   }
 
   const response = await fetch(url);
-  
+
   if (response.status === 429) {
-    return [{ symbol: "TOO MANY REQUESTS", name: "", currency: "", exchangeFullName: "", exchange: "" }];
+    return [
+      {
+        symbol: "TOO MANY REQUESTS",
+        name: "",
+        currency: "",
+        exchangeFullName: "",
+        exchange: "",
+      },
+    ];
   }
-  
+
   return response.json();
 }
 
@@ -77,6 +86,7 @@ export function TickerFinder() {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [usOnly, setUsOnly] = useState(true);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -103,13 +113,22 @@ export function TickerFinder() {
     const results: SearchResult[] = [];
 
     for (const query of companyNames) {
-      setProgress(`Searching ${results.length + 1}/${companyNames.length}: ${query}`);
+      setProgress(
+        `Searching ${results.length + 1}/${companyNames.length}: ${query}`,
+      );
 
       try {
         const data = await fetchTickerData(query, apiKey);
+        const usOnlyData = data.filter((item) => item.currency === "USD");
 
         if (Array.isArray(data) && data.length > 0) {
-          results.push({ query, result: data[0] ?? null });
+          if (usOnly) {
+            const result = usOnlyData[0] ?? null;
+            results.push({ query, result });
+          } else {
+            const result = data[0] ?? null;
+            results.push({ query, result });
+          }
         } else {
           results.push({ query, result: null, error: "No results found" });
         }
@@ -149,7 +168,9 @@ export function TickerFinder() {
     }
 
     setCsvOutput(tsvRows.join("\n"));
-    setProgress(`Complete! Found tickers for ${companyNames.length} companies.`);
+    setProgress(
+      `Complete! Found tickers for ${companyNames.length} companies.`,
+    );
     setIsLoading(false);
   };
 
@@ -192,6 +213,14 @@ export function TickerFinder() {
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* API Key Input */}
               <div className="space-y-2">
+                <Label htmlFor="usOnly" className="flex items-center space-x-2">
+                  U.S. Only
+                </Label>
+                <Switch
+                  id="usOnly"
+                  checked={usOnly}
+                  onCheckedChange={(checked) => setUsOnly(checked === true)}
+                />
                 <Label htmlFor="apiKey" className="text-sm font-medium">
                   FMP API Key
                 </Label>
@@ -227,7 +256,9 @@ export function TickerFinder() {
                 <Textarea
                   id="companies"
                   name="companies"
-                  placeholder={"Apple Inc\nMicrosoft Corporation\nAmazon.com Inc\nAlphabet Inc"}
+                  placeholder={
+                    "Apple Inc\nMicrosoft Corporation\nAmazon.com Inc\nAlphabet Inc"
+                  }
                   className="min-h-[180px] font-mono text-sm bg-white dark:bg-slate-800 resize-y"
                   required
                 />
